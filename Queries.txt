@@ -1,0 +1,81 @@
+/*Query 1 - query used for first insight */
+SELECT
+	fi.title film_title,
+	c.name category_name, 
+	COUNT(*) rental_count
+FROM category c
+	JOIN film_category f ON c.category_id = f.category_id
+	JOIN film fi ON fi.film_id = f.film_id
+	JOIN inventory i ON i.film_id = fi.film_id
+	JOIN rental r ON i.inventory_id = r.inventory_id
+WHERE 
+	name IN('Animation','Children','Classics','Comedy','Music')
+GROUP BY
+	c.name,
+	fi.title
+ORDER BY
+	 c.name;
+
+/*Query 2 - query used for the second insight */
+SELECT 
+	month, 
+	year, 
+	store, 
+	COUNT(id) AS count_rentals
+FROM 
+	(SELECT EXTRACT(month FROM r.rental_date) AS month,
+EXTRACT
+	(year FROM r.rental_date) AS year, s.store_id as store, r.rental_id as id
+FROM 
+	rental r
+JOIN 
+	staff s ON r.staff_id = s.staff_id) AS t1
+GROUP BY 
+	1,2,3
+ORDER BY 
+	count_rentals DESC;
+
+/*Query 3 - query used for the third insight */
+WITH table1 As (
+	SELECT 
+		c.name,
+	NTILE (4) OVER (Order By rental_duration) as standard_quartile
+	FROM film fi
+	JOIN film_category f ON f.film_id = fi.film_id
+	JOIN category c ON c.category_id = f.category_id
+	WHERE 
+		c.name IN ('Animation','Children','Classics','Comedy','Family','Music'))
+SELECT
+	name,
+	standard_quartile, 
+	Count(name) As Total
+FROM table1
+GROUP BY 1,2
+ORDER BY 1,2;
+
+/*Query 4 - query used for the fourth insight */
+WITH top_ten AS( 
+	SELECT 
+		customer_id
+	FROM 
+		payment
+	GROUP BY 
+		1
+	ORDER BY 
+		SUM(amount) DESC
+	LIMIT 10),
+payment_summary AS( 
+	SELECT
+		DATE_TRUNC('month', payment_date) AS pay_month,
+		first_name||' '||last_name AS full_name,
+	COUNT(*) AS pay_count,
+	SUM(amount) AS pay_amount
+	FROM customer c
+	JOIN top_ten ON c.customer_id = top_ten.customer_id
+	JOIN payment p ON top_ten.customer_id = p.customer_id
+	GROUP BY 1, 2
+	ORDER BY 2, 1)
+SELECT *, 
+	pay_amount - LAG(pay_amount) OVER (PARTITION BY full_name ORDER BY pay_month) AS lag_difference
+FROM payment_summary;
+
